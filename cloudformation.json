@@ -1,10 +1,10 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
   "Parameters": {
-    "RandomStringForNameSuffix": {
+    "ResourceNameSuffix": {
       "Type": "String",
       "AllowedPattern": "[a-z0-9_-]*",
-      "Description": "This will be used as suffix for provisioned resources name. RandomStringForNameSuffix can only contain lower-case letters, numbers, and hyphens"
+      "Description": "This will be used as suffix for provisioned resources name. ResourceNameSuffix can only contain lower-case letters, numbers, and hyphens"
     },
     "RestApiStageName": {
       "Type": "String",
@@ -41,7 +41,7 @@
             [
               { "Ref": "AWS::StackName" },
               "lambda-wellarchitected-role",
-              { "Ref": "RandomStringForNameSuffix" }
+              { "Ref": "ResourceNameSuffix" }
             ]
           ]
         },
@@ -83,7 +83,7 @@
       "Type": "AWS::Lambda::Function",
       "Properties": {
         "Code": {
-          "ImageUri": "931637813668.dkr.ecr.us-east-1.amazonaws.com/wellarchitected-partner-test:latest"
+          "ImageUri": "931637813668.dkr.ecr.us-east-1.amazonaws.com/vazudev-prod-partner-container:v1.1.0"
         },
         "FunctionName": {
           "Fn::Join": [
@@ -91,7 +91,7 @@
             [
               { "Ref": "AWS::StackName" },
               "lambda-wellarchitected",
-              { "Ref": "RandomStringForNameSuffix" }
+              { "Ref": "ResourceNameSuffix" }
             ]
           ]
         },
@@ -122,7 +122,7 @@
             [
               { "Ref": "AWS::StackName" },
               "wellarchitected",
-              { "Ref": "RandomStringForNameSuffix" }
+              { "Ref": "ResourceNameSuffix" }
             ]
           ]
         }
@@ -138,7 +138,7 @@
             [
               { "Ref": "AWS::StackName" },
               "wellarchitected",
-              { "Ref": "RandomStringForNameSuffix" }
+              { "Ref": "ResourceNameSuffix" }
             ]
           ]
         },
@@ -167,7 +167,7 @@
             [
               { "Ref": "AWS::StackName" },
               "wellarchitected",
-              { "Ref": "RandomStringForNameSuffix" }
+              { "Ref": "ResourceNameSuffix" }
             ]
           ]
         },
@@ -183,7 +183,7 @@
         "Domain": {
           "Fn::Join": [
             "-",
-            ["wellarchitected", { "Ref": "RandomStringForNameSuffix" }]
+            ["wellarchitected", { "Ref": "ResourceNameSuffix" }]
           ]
         },
         "UserPoolId": { "Ref": "CognitoUserPool" }
@@ -216,7 +216,7 @@
                 [
                   { "Ref": "AWS::StackName" },
                   "wellarchitected-title",
-                  { "Ref": "RandomStringForNameSuffix" }
+                  { "Ref": "ResourceNameSuffix" }
                 ]
               ]
             }
@@ -235,7 +235,7 @@
             [
               { "Ref": "AWS::StackName" },
               "wellarchitected",
-              { "Ref": "RandomStringForNameSuffix" }
+              { "Ref": "ResourceNameSuffix" }
             ]
           ]
         },
@@ -254,7 +254,7 @@
             [
               { "Ref": "AWS::StackName" },
               "wellarchitected-default",
-              { "Ref": "RandomStringForNameSuffix" }
+              { "Ref": "ResourceNameSuffix" }
             ]
           ]
         },
@@ -360,7 +360,7 @@
             "DomainPrefix": {
               "Fn::Join": [
                 "-",
-                ["wellarchitected", { "Ref": "RandomStringForNameSuffix" }]
+                ["wellarchitected", { "Ref": "ResourceNameSuffix" }]
               ]
             }
           }
