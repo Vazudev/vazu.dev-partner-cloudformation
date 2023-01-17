@@ -1,0 +1,381 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Parameters": {
+    "RandomStringForNameSuffix": {
+      "Type": "String",
+      "AllowedPattern": "[a-z0-9_-]*",
+      "Description": "This will be used as suffix for provisioned resources name. RandomStringForNameSuffix can only contain lower-case letters, numbers, and hyphens"
+    },
+    "RestApiStageName": {
+      "Type": "String",
+      "Default": "prod"
+    },
+    "ApiGatewayResourcePathName": {
+      "Type": "String",
+      "Default": "well-architected",
+      "AllowedPattern": "[a-z0-9_-]*",
+      "Description": "Path Name for API Gateway Resource. ApiGatewayResourcePathName can only contain lower-case letters, numbers, and hyphens"
+    }
+  },
+  "Resources": {
+    "IAMRoleLambdaFunction": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "Statement1",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "MaxSessionDuration": 3600,
+        "RoleName": {
+          "Fn::Join": [
+            "-",
+            [
+              { "Ref": "AWS::StackName" },
+              "lambda-wellarchitected-role",
+              { "Ref": "RandomStringForNameSuffix" }
+            ]
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": ["wellarchitected:*"],
+                  "Resource": "*"
+                }
+              ]
+            },
+            "PolicyName": "VazuDevWellArchitectedToolPolicy"
+          },
+          {
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogGroup",
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            },
+            "PolicyName": "VazuDevLambdaBasicExecutionPolicy"
+          }
+        ]
+      }
+    },
+    "LambdaFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "ImageUri": "931637813668.dkr.ecr.us-east-1.amazonaws.com/wellarchitected-partner-test:latest"
+        },
+        "FunctionName": {
+          "Fn::Join": [
+            "-",
+            [
+              { "Ref": "AWS::StackName" },
+              "lambda-wellarchitected",
+              { "Ref": "RandomStringForNameSuffix" }
+            ]
+          ]
+        },
+        "PackageType": "Image",
+        "Role": {
+          "Fn::GetAtt": ["IAMRoleLambdaFunction", "Arn"]
+        },
+        "Timeout": 900
+      }
+    },
+    "CognitoUserPool": {
+      "Type": "AWS::Cognito::UserPool",
+      "Properties": {
+        "AccountRecoverySetting": {
+          "RecoveryMechanisms": [
+            {
+              "Name": "admin_only",
+              "Priority": 1
+            }
+          ]
+        },
+        "AdminCreateUserConfig": {
+          "AllowAdminCreateUserOnly": true
+        },
+        "UserPoolName": {
+          "Fn::Join": [
+            "-",
+            [
+              { "Ref": "AWS::StackName" },
+              "wellarchitected",
+              { "Ref": "RandomStringForNameSuffix" }
+            ]
+          ]
+        }
+      }
+    },
+    "CognitoUserPoolResourceServer": {
+      "Type": "AWS::Cognito::UserPoolResourceServer",
+      "Properties": {
+        "Identifier": { "Ref": "ApiGatewayResourcePathName" },
+        "Name": {
+          "Fn::Join": [
+            "-",
+            [
+              { "Ref": "AWS::StackName" },
+              "wellarchitected",
+              { "Ref": "RandomStringForNameSuffix" }
+            ]
+          ]
+        },
+        "Scopes": [
+          {
+            "ScopeDescription": "Scope to read and write on well-architected tool",
+            "ScopeName": "default"
+          }
+        ],
+        "UserPoolId": { "Ref": "CognitoUserPool" }
+      }
+    },
+    "CognitoUserPoolClient": {
+      "Type": "AWS::Cognito::UserPoolClient",
+      "Properties": {
+        "AllowedOAuthFlows": ["client_credentials"],
+        "AllowedOAuthFlowsUserPoolClient": true,
+        "AllowedOAuthScopes": [
+          {
+            "Fn::Sub": "${ApiGatewayResourcePathName}/default"
+          }
+        ],
+        "ClientName": {
+          "Fn::Join": [
+            "-",
+            [
+              { "Ref": "AWS::StackName" },
+              "wellarchitected",
+              { "Ref": "RandomStringForNameSuffix" }
+            ]
+          ]
+        },
+        "EnableTokenRevocation": true,
+        "GenerateSecret": true,
+        "UserPoolId": { "Ref": "CognitoUserPool" }
+      },
+      "DependsOn": ["CognitoUserPoolResourceServer"]
+    },
+    "CognitoUserPoolDomain": {
+      "Type": "AWS::Cognito::UserPoolDomain",
+      "Properties": {
+        "Domain": {
+          "Fn::Join": [
+            "-",
+            ["wellarchitected", { "Ref": "RandomStringForNameSuffix" }]
+          ]
+        },
+        "UserPoolId": { "Ref": "CognitoUserPool" }
+      }
+    },
+    "LambdaInvokePermission": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": { "Fn::GetAtt": ["LambdaFunction", "Arn"] },
+        "Principal": "apigateway.amazonaws.com",
+        "SourceAccount": {
+          "Ref": "AWS::AccountId"
+        },
+        "SourceArn": {
+          "Fn::Sub": "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/${ApiGatewayResourcePathName}"
+        }
+      }
+    },
+    "RestApi": {
+      "Type": "AWS::ApiGateway::RestApi",
+      "Properties": {
+        "Body": {
+          "swagger": 2,
+          "info": {
+            "version": "0.0.1",
+            "title": {
+              "Fn::Join": [
+                "-",
+                [
+                  { "Ref": "AWS::StackName" },
+                  "wellarchitected-title",
+                  { "Ref": "RandomStringForNameSuffix" }
+                ]
+              ]
+            }
+          },
+          "basePath": "/",
+          "schemes": ["https"],
+          "definitions": {
+            "Empty": {
+              "type": "object"
+            }
+          }
+        },
+        "Name": {
+          "Fn::Join": [
+            "-",
+            [
+              { "Ref": "AWS::StackName" },
+              "wellarchitected",
+              { "Ref": "RandomStringForNameSuffix" }
+            ]
+          ]
+        },
+        "Parameters": {
+          "endpointConfigurationTypes": "REGIONAL"
+        }
+      }
+    },
+    "RestApiAuthorizer": {
+      "Type": "AWS::ApiGateway::Authorizer",
+      "Properties": {
+        "IdentitySource": "method.request.header.Authorization",
+        "Name": {
+          "Fn::Join": [
+            "-",
+            [
+              { "Ref": "AWS::StackName" },
+              "wellarchitected-default",
+              { "Ref": "RandomStringForNameSuffix" }
+            ]
+          ]
+        },
+        "ProviderARNs": [{ "Fn::GetAtt": ["CognitoUserPool", "Arn"] }],
+        "RestApiId": { "Ref": "RestApi" },
+        "Type": "COGNITO_USER_POOLS"
+      },
+      "DependsOn": ["RestApi"]
+    },
+    "RestApiResource": {
+      "Type": "AWS::ApiGateway::Resource",
+      "Properties": {
+        "ParentId": { "Fn::GetAtt": ["RestApi", "RootResourceId"] },
+        "PathPart": { "Ref": "ApiGatewayResourcePathName" },
+        "RestApiId": { "Ref": "RestApi" }
+      },
+      "DependsOn": ["RestApi"]
+    },
+    "RestApiMethod": {
+      "Type": "AWS::ApiGateway::Method",
+      "Properties": {
+        "ApiKeyRequired": false,
+        "AuthorizationScopes": [
+          {
+            "Fn::Sub": "${ApiGatewayResourcePathName}/default"
+          }
+        ],
+        "AuthorizationType": "COGNITO_USER_POOLS",
+        "AuthorizerId": { "Ref": "RestApiAuthorizer" },
+        "HttpMethod": "POST",
+        "Integration": {
+          "Type": "AWS_PROXY",
+          "IntegrationHttpMethod": "POST",
+          "Uri": {
+            "Fn::Sub": "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunction.Arn}/invocations"
+          }
+        },
+        "ResourceId": { "Ref": "RestApiResource" },
+        "RestApiId": { "Ref": "RestApi" }
+      },
+      "DependsOn": [
+        "RestApi",
+        "RestApiAuthorizer",
+        "LambdaFunction",
+        "RestApiResource"
+      ]
+    },
+    "RestApiDeployment": {
+      "Type": "AWS::ApiGateway::Deployment",
+      "Properties": {
+        "RestApiId": { "Ref": "RestApi" }
+      },
+      "DependsOn": [
+        "RestApi",
+        "RestApiAuthorizer",
+        "LambdaFunction",
+        "RestApiResource",
+        "RestApiMethod"
+      ]
+    },
+    "RestApiStage": {
+      "Type": "AWS::ApiGateway::Stage",
+      "Properties": {
+        "DeploymentId": { "Ref": "RestApiDeployment" },
+        "MethodSettings": [
+          {
+            "DataTraceEnabled": true,
+            "HttpMethod": "*",
+            "MetricsEnabled": true,
+            "ResourcePath": "/*"
+          }
+        ],
+        "RestApiId": { "Ref": "RestApi" },
+        "StageName": { "Ref": "RestApiStageName" },
+        "TracingEnabled": true
+      },
+      "DependsOn": [
+        "RestApi",
+        "RestApiAuthorizer",
+        "LambdaFunction",
+        "RestApiResource",
+        "RestApiMethod",
+        "RestApiDeployment"
+      ]
+    }
+  },
+  "Outputs": {
+    "InvokeUrl": {
+      "Description": "Resource Stage Api Gateway Invoke URL",
+      "Value": {
+        "Fn::Sub": "https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/${RestApiStageName}/${ApiGatewayResourcePathName}"
+      },
+      "Export": {
+        "Name": "InvokeUrl"
+      }
+    },
+    "TokenEndpoint": {
+      "Description": "Cognito Token Endpoint",
+      "Value": {
+        "Fn::Sub": [
+          "https://${DomainPrefix}.auth.${AWS::Region}.amazoncognito.com/oauth2/token",
+          {
+            "DomainPrefix": {
+              "Fn::Join": [
+                "-",
+                ["wellarchitected", { "Ref": "RandomStringForNameSuffix" }]
+              ]
+            }
+          }
+        ]
+      },
+      "Export": {
+        "Name": "TokenEndpoint"
+      }
+    },
+    "CognitoUserPoolClientId": {
+      "Description": "Cognito User Pool Client Id",
+      "Value": { "Ref": "CognitoUserPoolClient" },
+      "Export": {
+        "Name": "CognitoUserPoolClientId"
+      }
+    }
+  }
+}
